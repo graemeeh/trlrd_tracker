@@ -95,7 +95,7 @@ def feats_detect(vid, min: int = 10000, max: int = 10000000, ksize: int = 7):
             cv2.line(line_image, (x1, y1), (x2, y2), (255, 0, 0), 5)
             details.append({'type': 'line','x1': x1,'y1': y1,'x2/radius': x2,'y2': y2})
     '''
-    circles = cv2.HoughCircles(blur_gray3, cv2.HOUGH_GRADIENT, 1.5, blur_gray3.shape[0]/20, param1=200, param2=600, minRadius=100, maxRadius= int(blur_gray3.shape[0]/1.5))
+    circles = cv2.HoughCircles(blur_gray3, cv2.HOUGH_GRADIENT, 1.5, blur_gray3.shape[0]/10, param1=200, param2=600, minRadius=100, maxRadius= int(blur_gray3.shape[0]/1.5))
     if circles is not None:
         circles = np.uint16(np.around(circles))
         for i in circles[0, :]:
@@ -119,3 +119,10 @@ def join_tracks(f: pd.DataFrame, maxdist: int):
         # maybe also optimize area difference between subsequent frames? cost matrix from https://github.com/Tierpsy/tierpsy-tracker/blob/development/tierpsy/analysis/traj_join/joinBlobsTrajectories.py
     return f
 
+VIDEO = cv2.VideoCapture("N2.avi")
+d, b = feats_detect(VIDEO)
+while True:
+    b = cv2.resize(b, (1024, 768))
+    cv2.imshow('Video', b)
+    if cv2.waitKey(1000) & 0xFF == ord('q'):
+        break
