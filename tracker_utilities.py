@@ -4,6 +4,9 @@ import pandas as pd
 import scipy
 import os
 
+from cv2 import COLOR_GRAY2BGR
+
+
 def log_abs(img, sigma: float = 0.3):
     """
     see https://www.youtube.com/watch?v=uNP6ZwQ3r6A for how this works
@@ -72,7 +75,7 @@ def vid_setup(c, s):
     h, w = gray.shape[:2]
     return n_frames, h, w
 
-def feats_detect(vid, min: int = 10000, max: int = 10000000, ksize: int = 7):
+def feats_detect(vid, min: int = 10000, max: int = 10000000, ksize: int = 155):
     """
 
     :param min:
@@ -81,21 +84,22 @@ def feats_detect(vid, min: int = 10000, max: int = 10000000, ksize: int = 7):
     :param ksize:
     :return:
     """
-    # below bit is from me
-    morph = cv2.morphologyEx(median_frame(vid), cv2.MORPH_OPEN,cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (ksize, ksize)))
-    blur_gray = cv2.adaptiveThreshold(morph,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY,35,2)
-    blur_gray3 = worms_track(log_abs(img = blur_gray, sigma=0.5), min = min, max = max, ratio = 1, time = 1)[1]
-    line_image = cv2.cvtColor(np.copy(blur_gray3) * 0, cv2.COLOR_GRAY2BGR)
-    # below is from cv2 docs
+    hist = cv2.equalizeHist(median_frame(vid))
+    line_image = cv2.cvtColor(np.zeros_like(hist), COLOR_GRAY2BGR)
+    height, width = hist.shape[:2]
+    minR = round(width / 3)
+    maxR = round(width / 1.5)
+    minDis = round(width / 1)
+    blur = cv2.GaussianBlur(hist, (31, 31), cv2.BORDER_DEFAULT)
+    circles = cv2.HoughCircles(blur, cv2.HOUGH_GRADIENT, 1, minDis, param1=14, param2=100, minRadius=minR, maxRadius=maxR)
     details = []
     '''
-    lines = cv2.HoughLinesP(blur_gray3, rho = 1, theta = np.pi / 180, threshold = 500, lines = np.array([]), minLineLength = 500, maxLineGap = 20 )
+    lines = cv2.HoughLinesP(blur, rho = 1, theta = np.pi / 180, threshold = 500, lines = np.array([]), minLineLength = 500, maxLineGap = 20 )
     for line in lines:
         for x1, y1, x2, y2 in line:
             cv2.line(line_image, (x1, y1), (x2, y2), (255, 0, 0), 5)
             details.append({'type': 'line','x1': x1,'y1': y1,'x2/radius': x2,'y2': y2})
     '''
-    circles = cv2.HoughCircles(blur_gray3, cv2.HOUGH_GRADIENT, 1.5, blur_gray3.shape[0]/10, param1=200, param2=600, minRadius=100, maxRadius= int(blur_gray3.shape[0]/1.5))
     if circles is not None:
         circles = np.uint16(np.around(circles))
         for i in circles[0, :]:
