@@ -12,6 +12,7 @@ BATCH_SIZE = 30
 
 tl.set_backend('pytorch')
 
+
 # sth from https://www.nature.com/articles/s41598-025-18059-x. this is just the standard l1 shrinkage operator but tensorified
 def shrink(X, tau):
     return torch.mul(torch.sign(X), torch.max(torch.abs(X) - tau, torch.zeros_like(X)))
@@ -40,18 +41,20 @@ def trlrd_(Z, rho=5, betamax=1e5, maxiter=10, tol=0.8e-2):
         S = shrink(Z-L+ A/beta, lamda/beta)
         # update multiplier A
         A = A + beta * (Z-L-S)
-        # update beta
+        # update penalty beta
         beta = min(beta * rho, betamax)
         err = torch.Tensor.norm(Z - L - S, 'fro') / torch.Tensor.norm(Z, 'fro')
         print("Iteration: ", i, "err:", err.item())
         if err < tol:
             break
-    return torch.Tensor.numpy(L), torch.Tensor.numpy(torch.abs(S))
+    return torch.Tensor.numpy(torch.abs(S))
 
 def load_vid(path, scale, batch_size, dtype=np.float32, **trlrd_kwargs):
     vid = cv2.VideoCapture(path)
     n_frames, h, w = vid_setup(vid, scale)
     vid.set(cv2.CAP_PROP_POS_FRAMES, 0)
+    fourcc = cv2.VideoWriter_fourcc(*'XVID')
+    out = cv2.VideoWriter(path + 'output.avi', fourcc, 20.0, (w*scale, h*scale))
     pf = 0
     startframe = 0
     df_l = []
@@ -70,11 +73,12 @@ def load_vid(path, scale, batch_size, dtype=np.float32, **trlrd_kwargs):
         X = np.transpose(np.array(chunk_l, dtype=dtype), (1, 2, 0))
         endframe = startframe + count
         print(f"frames {startframe}-{endframe - 1}")
-        Lb, Sb = trlrd_(X, **trlrd_kwargs)
-        df_l.append(play_vid_t(np.abs(Sb), h, w, index = startframe, path=path, scale=scale))
+        Sb = trlrd_(X, **trlrd_kwargs)
+        df_l.append(play_vid_t(Sb, h, w, index = startframe, path=path, scale=scale, out = out))
         pf = pf + count
         startframe = endframe
     vid.release()
+    out.release()
     return pd.concat(df_l)
 
 def batch_track(folder):
