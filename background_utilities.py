@@ -1,11 +1,24 @@
 import numpy as np
 import cv2
 import pandas as pd
-import scipy
 import os
+import torch
 from tracker_utilities import worms_track
 
+# sth from https://www.nature.com/articles/s41598-025-18059-x
+def shrink(X, tau):
+    """
+    :param X: input tensor
+    :param tau: threshold
+    :return: thresholded X, with zeros everywhere that X doesn't clear threshold tau
+    """
+    return torch.mul(torch.sign(X), torch.max(torch.abs(X) - tau, torch.zeros_like(X)))
+
 def grab_vids(folder):
+    """
+    :param folder: input folder that you want to recursively track all .avi files in
+    :return: all videos (with .avi extension) in a given folder
+    """
     vids = []
     for root, dirs, files in os.walk(folder):
         for f in files:
@@ -14,11 +27,28 @@ def grab_vids(folder):
     return vids
 
 def chunks(n, min, thresh):
+    """
+    :param n: # of frames in vid
+    :param min: minimum chunk size in frames
+    :param thresh: how small can the final chunk be
+    :return: min, updated as per condition below
+    """
     while n % min < thresh:
         min += 1
     return min
 
 def play_vid_t(M, h, w, index, scale, path, out, title="Video"):
+    """
+    :param M: input video
+    :param h: unscaled height of video frame
+    :param w: unscaled width
+    :param index: index of first frame in video
+    :param scale: scaling factor
+    :param path: path to raw .avi video
+    :param out: output .avi video (does not work yet)
+    :param title: title of cv2 window
+    :return: data frame with all worm tracking info
+    """
     vid = cv2.VideoCapture(path)
     df_l = []
     paused = False
