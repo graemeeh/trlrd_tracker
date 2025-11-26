@@ -1,35 +1,45 @@
-import torch
-import numpy as np
-import tensorly as tl
-import cv2
-import pandas as pd
-from tracker_utilities import feats_detect, vid_setup, resizr, join_tracks
-from background_utilities import chunks, play_vid_t, grab_vids
+
 
 FOLDER = '/Users/graeme'
 SCALE = 0.5
 BATCH_SIZE = 30
 
-tl.set_backend('pytorch')
+from tracker_utilities import feats_detect, vid_setup, resizr, join_tracks
+from background_utilities import chunks, play_vid_t, grab_vids, shrink
 
+import cv2
+import pandas as pd
+import torch
+import numpy as np
+import tensorly
 
-# sth from https://www.nature.com/articles/s41598-025-18059-x. this is just the standard l1 shrinkage operator but tensorified
-def shrink(X, tau):
-    return torch.mul(torch.sign(X), torch.max(torch.abs(X) - tau, torch.zeros_like(X)))
+tensorly.set_backend('pytorch')
 
 # tensor ring decomposition: https://arxiv.org/abs/1606.05535
 # I don't understand this too well but https://proceedings.mlr.press/v139/malik21b/malik21b.pdf has a better explanation than above arxiv preprint.
 def trd(X, ranks):
-    cores = tl.decomposition.tensor_ring(X, rank=ranks)
-    return tl.tr_tensor.tr_to_tensor(cores)
+    """
+    :param X: input tensor (video)
+    :param ranks: dimensions for tensor cores
+    :return: input tensor reconstructed from cores
+    """
+    cores = tensorly.decomposition.tensor_ring(X, rank=ranks)
+    return tensorly.tr_tensor.tr_to_tensor(cores)
 
 # based on https://www.nature.com/articles/s41598-025-18059-x but without extra sparse tensor W (it was giving me grief!!)
-def trlrd_(Z, rho=5, betamax=1e5, maxiter=10, tol=0.8e-2):
-    Z = torch.from_numpy(Z)
+def trlrd(Z, rho=5, betamax=1e5, maxiter=10, tol=0.8e-2):
+    """
+    :param Z: input video
+    :param rho: factor by which penalty "beta" is increased by each iteration
+    :param betamax: maximum value for beta. it is pretty redundant in this
+    :param maxiter: maximum number of iterations before the program quits. use tolerance rather than maxiter to limit iterations spent on one batch
+    :param tol: tolerance for error norm
+    :return: sparse foreground video S
+    """
+    Z = torch.from_numpy(Z) if isinstance(Z, np.ndarray) else Z
     m, n, b = Z.shape
     ranks = (b//2, b//2, b//2, b//2)
     # ranks = (b, b, b, b)
-    L = torch.zeros_like(Z)
     S = torch.zeros_like(Z)
     A = torch.zeros_like(Z)
     lamda = 1 / np.sqrt(max(m, n) * b)
@@ -45,13 +55,21 @@ def trlrd_(Z, rho=5, betamax=1e5, maxiter=10, tol=0.8e-2):
         beta = min(beta * rho, betamax)
         err = torch.Tensor.norm(Z - L - S, 'fro') / torch.Tensor.norm(Z, 'fro')
         print("Iteration: ", i, "err:", err.item())
-        if err < tol:
+        if err.item() < tol:
             break
     return torch.Tensor.numpy(torch.abs(S))
 
 def load_vid(path, scale, batch_size, dtype=np.float32, **trlrd_kwargs):
+    """
+    :param path: input path .avi file that you want to track worms on
+    :param scale: Scaling factor to apply to video frames. I find that 0.5 is pretty good
+    :param batch_size: size of "batches" of frames to process at once. Dependent on how much your worms move and what your framerate is.
+    :param dtype: float32 for speed.
+    :param trlrd_kwargs: in case you want to change defaults
+    :return: data frame with all the worm track information on it
+    """
     vid = cv2.VideoCapture(path)
-    n_frames, h, w = vid_setup(vid, scale)
+    n_frames, h, w , g = vid_setup(vid, scale)
     vid.set(cv2.CAP_PROP_POS_FRAMES, 0)
     fourcc = cv2.VideoWriter_fourcc(*'XVID')
     out = cv2.VideoWriter(path + 'output.avi', fourcc, 20.0, (w*scale, h*scale))
@@ -70,10 +88,11 @@ def load_vid(path, scale, batch_size, dtype=np.float32, **trlrd_kwargs):
             count += 1
         if not chunk_l:
             break
+        # orient video correctly.
         X = np.transpose(np.array(chunk_l, dtype=dtype), (1, 2, 0))
         endframe = startframe + count
         print(f"frames {startframe}-{endframe - 1}")
-        Sb = trlrd_(X, **trlrd_kwargs)
+        Sb = trlrd(X, **trlrd_kwargs)
         df_l.append(play_vid_t(Sb, h, w, index = startframe, path=path, scale=scale, out = out))
         pf = pf + count
         startframe = endframe
@@ -82,6 +101,10 @@ def load_vid(path, scale, batch_size, dtype=np.float32, **trlrd_kwargs):
     return pd.concat(df_l)
 
 def batch_track(folder):
+    """
+    :param folder: recursively track worms on each .avi file in this folder.
+    :return: nothing, saves data frames in each folder that it finds a .avi file in.
+    """
     vids = grab_vids(folder)
     for i in vids:
         df = load_vid(i, scale=SCALE, batch_size=BATCH_SIZE)
