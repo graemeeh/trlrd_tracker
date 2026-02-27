@@ -45,13 +45,9 @@ def trlrd(Z, rho=5, betamax=1e5, maxiter=10, tol=0.8e-2):
     lamda = 1 / np.sqrt(max(m, n) * b)
     beta = 1e-4
     for i in range(maxiter):
-        # update L
         L = trd(Z-S+ A/beta, ranks)
-        # update S
         S = shrink(Z-L+ A/beta, lamda/beta)
-        # update multiplier A
         A = A + beta * (Z-L-S)
-        # update penalty beta
         beta = min(beta * rho, betamax)
         err = torch.Tensor.norm(Z - L - S, 'fro') / torch.Tensor.norm(Z, 'fro')
         print("Iteration: ", i, "err:", err.item())
@@ -88,7 +84,6 @@ def load_vid(path, scale, batch_size, dtype=np.float32, **trlrd_kwargs):
             count += 1
         if not chunk_l:
             break
-        # orient video correctly.
         X = np.transpose(np.array(chunk_l, dtype=dtype), (1, 2, 0))
         endframe = startframe + count
         print(f"frames {startframe}-{endframe - 1}")
