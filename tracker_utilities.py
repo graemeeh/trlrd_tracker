@@ -87,12 +87,13 @@ def resizr(image, scale):
 
 def vid_setup(c, s):
     """
-
     :param c: video capture cv2
     :param s: resizr resizing factor
     :return: number of frames, height and width of frame
     """
     ret, frame = c.read()
+    if not ret or frame is None:
+        raise ValueError("whooopsies!.")
     n_frames = int(c.get(cv2.CAP_PROP_FRAME_COUNT))
     gray = resizr(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY), s)
     h, w = gray.shape[:2]
