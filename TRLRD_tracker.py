@@ -1,6 +1,6 @@
 
 
-FOLDER = '/Users/graeme'
+FOLDER = 'E:/GE/GE Ethanol Quadrants Resampled'
 SCALE = 0.5
 BATCH_SIZE = 30
 
@@ -68,7 +68,7 @@ def load_vid(path, scale, batch_size, dtype=np.float32, **trlrd_kwargs):
     n_frames, h, w , g = vid_setup(vid, scale)
     vid.set(cv2.CAP_PROP_POS_FRAMES, 0)
     fourcc = cv2.VideoWriter_fourcc(*'XVID')
-    out = cv2.VideoWriter(path + 'output.avi', fourcc, 20.0, (w*scale, h*scale))
+    out = cv2.VideoWriter(filename=path + 'output.avi', fourcc=fourcc, fps=7.5, frameSize=(int(w*scale), int(h*scale)), isColor=False)
     pf = 0
     startframe = 0
     df_l = []
@@ -108,7 +108,7 @@ def batch_track(folder):
         d, b = feats_detect(VIDEO)
         while True:
             cv2.imshow('Video', b)
-            if cv2.waitKey(1000) & 0xFF == ord('q'):
+            if cv2.waitKey(1000):
                 break
         VIDEO.release()
         cv2.destroyAllWindows()
